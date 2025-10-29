@@ -1,8 +1,8 @@
 name: Auto Sync Fork with Releases
 
 on:
-  schedule:
-    - cron: '0 2 * * *'  # 每天 UTC 2:00（北京时间 10:00）
+ # schedule:
+  #  - cron: '0 2 * * *'  # 每天 UTC 2:00（北京时间 10:00）
   workflow_dispatch:     # 支持手动触发
 
 env:
@@ -87,193 +87,50 @@ jobs:
             mkdir -p "temp_assets/$TAG"
             
             if [ -z "$UPSTREAM_RELEASE_ID" ]; then
-              echo "ℹ️ 上游没有 $TAG 的 Release，创建包含源代码包的 Release"
-              
-              # 下载源代码包
-              echo "📥 下载源代码包..."
-              SOURCE_CODE_URLS=(
-                "https://github.com/${{ env.UPSTREAM_REPO }}/archive/refs/tags/$TAG.zip"
-                "https://github.com/${{ env.UPSTREAM_REPO }}/archive/refs/tags/$TAG.tar.gz"
-              )
-              
-              for SOURCE_URL in "${SOURCE_CODE_URLS[@]}"; do
-                FILENAME="temp_assets/$TAG/$(basename "$SOURCE_URL")"
-                echo "⬇️ 下载源代码包: $(basename "$SOURCE_URL")"
-                if curl -L -f -o "$FILENAME" "$SOURCE_URL"; then
-                  echo "✅ 源代码包下载成功"
-                else
-                  echo "❌ 源代码包下载失败"
-                fi
-              done
-              
-              # 创建 Release
-              if [ "$(ls -A temp_assets/$TAG/* 2>/dev/null)" ]; then
-                echo "🚀 创建 Release: $TAG"
-                
-                RELEASE_DATA='{
-                  "tag_name": "'$TAG'",
-                  "name": "'$TAG' (Synced from ${{ env.UPSTREAM_REPO }})",
-                  "body": "Automatically synced from ${{ env.UPSTREAM_REPO }}\n\n包含源代码包。",
-                  "draft": false,
-                  "prerelease": false
-                }'
-                
-                CREATE_RESPONSE=$(curl -s -X POST \
-                  -H "Authorization: token $GITHUB_TOKEN" \
-                  -H "Accept: application/vnd.github.v3+json" \
-                  -H "Content-Type: application/json" \
-                  "https://api.github.com/repos/$GITHUB_REPOSITORY/releases" \
-                  -d "$RELEASE_DATA")
-                
-                NEW_RELEASE_ID=$(echo "$CREATE_RESPONSE" | jq -r '.id // empty')
-                
-                if [ -n "$NEW_RELEASE_ID" ]; then
-                  echo "✅ Release 创建成功，ID: $NEW_RELEASE_ID"
-                  
-                  # 上传 Assets
-                  for ASSET_FILE in temp_assets/$TAG/*; do
-                    if [ -f "$ASSET_FILE" ]; then
-                      ASSET_NAME=$(basename "$ASSET_FILE")
-                      echo "⬆️ 上传: $ASSET_NAME"
-                      
-                      UPLOAD_RESPONSE=$(curl -s -X POST \
-                        -H "Authorization: token $GITHUB_TOKEN" \
-                        -H "Accept: application/vnd.github.v3+json" \
-                        -H "Content-Type: application/octet-stream" \
-                        "https://uploads.github.com/repos/$GITHUB_REPOSITORY/releases/$NEW_RELEASE_ID/assets?name=$ASSET_NAME" \
-                        --data-binary @"$ASSET_FILE")
-                      
-                      if echo "$UPLOAD_RESPONSE" | jq -r '.id // empty' | grep -q .; then
-                        echo "✅ 上传成功: $ASSET_NAME"
-                      else
-                        echo "❌ 上传失败: $ASSET_NAME"
-                      fi
-                    fi
-                  done
-                else
-                  echo "❌ Release 创建失败"
-                  echo "响应: $CREATE_RESPONSE"
-                fi
-              else
-                echo "❌ 没有可用的文件"
-              fi
+              echo "ℹ️ 上游没有 $TAG 的 Release"
+              echo "📝 说明：此 Tag 没有预编译的二进制文件，只有源代码"
+              echo "✅ 跳过创建 Release（GitHub 会自动提供源代码包）"
               
             else
               # 检查上游 Release 是否有 Assets
               ASSETS_COUNT=$(echo "$UPSTREAM_RESPONSE" | jq -r '.assets | length')
               
               if [ "$ASSETS_COUNT" -eq 0 ]; then
-                echo "ℹ️ 上游 Release 没有 Assets，创建包含源代码包的 Release"
-                
-                # 下载源代码包
-                echo "📥 下载源代码包..."
-                SOURCE_CODE_URLS=(
-                  "https://github.com/${{ env.UPSTREAM_REPO }}/archive/refs/tags/$TAG.zip"
-                  "https://github.com/${{ env.UPSTREAM_REPO }}/archive/refs/tags/$TAG.tar.gz"
-                )
-                
-                for SOURCE_URL in "${SOURCE_CODE_URLS[@]}"; do
-                  FILENAME="temp_assets/$TAG/$(basename "$SOURCE_URL")"
-                  echo "⬇️ 下载源代码包: $(basename "$SOURCE_URL")"
-                  if curl -L -f -o "$FILENAME" "$SOURCE_URL"; then
-                    echo "✅ 源代码包下载成功"
-                  else
-                    echo "❌ 源代码包下载失败"
-                  fi
-                done
-                
-                # 创建 Release
-                if [ "$(ls -A temp_assets/$TAG/* 2>/dev/null)" ]; then
-                  echo "🚀 创建 Release: $TAG"
-                  
-                  RELEASE_DATA='{
-                    "tag_name": "'$TAG'",
-                    "name": "'$TAG' (Synced from ${{ env.UPSTREAM_REPO }})",
-                    "body": "Automatically synced from ${{ env.UPSTREAM_REPO }}\n\n包含源代码包。",
-                    "draft": false,
-                    "prerelease": false
-                  }'
-                  
-                  CREATE_RESPONSE=$(curl -s -X POST \
-                    -H "Authorization: token $GITHUB_TOKEN" \
-                    -H "Accept: application/vnd.github.v3+json" \
-                    -H "Content-Type: application/json" \
-                    "https://api.github.com/repos/$GITHUB_REPOSITORY/releases" \
-                    -d "$RELEASE_DATA")
-                  
-                  NEW_RELEASE_ID=$(echo "$CREATE_RESPONSE" | jq -r '.id // empty')
-                  
-                  if [ -n "$NEW_RELEASE_ID" ]; then
-                    echo "✅ Release 创建成功，ID: $NEW_RELEASE_ID"
-                    
-                    # 上传 Assets
-                    for ASSET_FILE in temp_assets/$TAG/*; do
-                      if [ -f "$ASSET_FILE" ]; then
-                        ASSET_NAME=$(basename "$ASSET_FILE")
-                        echo "⬆️ 上传: $ASSET_NAME"
-                        
-                        UPLOAD_RESPONSE=$(curl -s -X POST \
-                          -H "Authorization: token $GITHUB_TOKEN" \
-                          -H "Accept: application/vnd.github.v3+json" \
-                          -H "Content-Type: application/octet-stream" \
-                          "https://uploads.github.com/repos/$GITHUB_REPOSITORY/releases/$NEW_RELEASE_ID/assets?name=$ASSET_NAME" \
-                          --data-binary @"$ASSET_FILE")
-                        
-                        if echo "$UPLOAD_RESPONSE" | jq -r '.id // empty' | grep -q .; then
-                          echo "✅ 上传成功: $ASSET_NAME"
-                        else
-                          echo "❌ 上传失败: $ASSET_NAME"
-                        fi
-                      fi
-                    done
-                  else
-                    echo "❌ Release 创建失败"
-                    echo "响应: $CREATE_RESPONSE"
-                  fi
-                else
-                  echo "❌ 没有可用的文件"
-                fi
+                echo "ℹ️ 上游 Release 没有预编译的 Assets"
+                echo "📝 说明：此 Release 只有源代码或文档"
+                echo "✅ 跳过创建 Release（GitHub 会自动提供源代码包）"
                 
               else
-                echo "✅ 发现上游 Release 有 $ASSETS_COUNT 个 Assets"
+                echo "✅ 发现上游 Release 有 $ASSETS_COUNT 个预编译 Assets"
                 
-                # 下载上游 Assets
-                echo "📥 下载上游 Assets..."
+                # 下载上游 Assets（只下载预编译的二进制文件）
+                echo "📥 下载预编译 Assets..."
                 ASSET_URLS=$(echo "$UPSTREAM_RESPONSE" | jq -r '.assets[].browser_download_url')
+                
+                # 计数器
+                DOWNLOAD_COUNT=0
                 
                 for ASSET_URL in $ASSET_URLS; do
                   if [ -n "$ASSET_URL" ]; then
                     FILENAME="temp_assets/$TAG/$(basename "$ASSET_URL")"
                     echo "⬇️ 下载: $(basename "$ASSET_URL")"
-                    curl -L -o "$FILENAME" "$ASSET_URL" && echo "✅ 下载成功" || echo "❌ 下载失败"
+                    if curl -L -f -o "$FILENAME" "$ASSET_URL"; then
+                      echo "✅ 下载成功"
+                      DOWNLOAD_COUNT=$((DOWNLOAD_COUNT + 1))
+                    else
+                      echo "❌ 下载失败"
+                    fi
                   fi
                 done
                 
-                # 同时下载源代码包
-                echo "📥 下载源代码包..."
-                SOURCE_CODE_URLS=(
-                  "https://github.com/${{ env.UPSTREAM_REPO }}/archive/refs/tags/$TAG.zip"
-                  "https://github.com/${{ env.UPSTREAM_REPO }}/archive/refs/tags/$TAG.tar.gz"
-                )
-                
-                for SOURCE_URL in "${SOURCE_CODE_URLS[@]}"; do
-                  FILENAME="temp_assets/$TAG/$(basename "$SOURCE_URL")"
-                  echo "⬇️ 下载源代码包: $(basename "$SOURCE_URL")"
-                  if curl -L -f -o "$FILENAME" "$SOURCE_URL"; then
-                    echo "✅ 源代码包下载成功"
-                  else
-                    echo "❌ 源代码包下载失败"
-                  fi
-                done
-                
-                # 创建 Release
-                if [ "$(ls -A temp_assets/$TAG/* 2>/dev/null)" ]; then
-                  echo "🚀 创建 Release: $TAG"
+                # 只有成功下载到文件时才创建 Release
+                if [ "$DOWNLOAD_COUNT" -gt 0 ]; then
+                  echo "🚀 创建 Release: $TAG（包含 $DOWNLOAD_COUNT 个预编译文件）"
                   
                   RELEASE_DATA='{
                     "tag_name": "'$TAG'",
                     "name": "'$TAG' (Synced from ${{ env.UPSTREAM_REPO }})",
-                    "body": "Automatically synced from ${{ env.UPSTREAM_REPO }}\n\n包含上游发布的文件和源代码包。",
+                    "body": "Automatically synced from ${{ env.UPSTREAM_REPO }}\n\n包含预编译的二进制文件。源代码包由 GitHub 自动提供。",
                     "draft": false,
                     "prerelease": false
                   }'
@@ -290,7 +147,7 @@ jobs:
                   if [ -n "$NEW_RELEASE_ID" ]; then
                     echo "✅ Release 创建成功，ID: $NEW_RELEASE_ID"
                     
-                    # 上传 Assets
+                    # 上传 Assets（只上传预编译文件）
                     for ASSET_FILE in temp_assets/$TAG/*; do
                       if [ -f "$ASSET_FILE" ]; then
                         ASSET_NAME=$(basename "$ASSET_FILE")
@@ -315,7 +172,7 @@ jobs:
                     echo "响应: $CREATE_RESPONSE"
                   fi
                 else
-                  echo "❌ 没有可用的文件"
+                  echo "❌ 没有成功下载任何预编译文件，跳过创建 Release"
                 fi
               fi
             fi
@@ -329,5 +186,7 @@ jobs:
         run: |
           rm -rf temp_assets
           echo "=== 同步完成 ==="
-          echo "✅ 所有 Tags 和 Releases 已同步"
+          echo "✅ 预编译文件的 Releases 已同步"
+          echo "📝 说明：只有包含预编译二进制文件的 Tags 会创建 Release"
+          echo "📝 说明：源代码包由 GitHub 自动为每个 Tag 提供"
           echo "📊 查看结果: https://github.com/$GITHUB_REPOSITORY/releases"
